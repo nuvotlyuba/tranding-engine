@@ -1,7 +1,17 @@
 package main
 
-import "fmt"
+import (
+	"context"
+	"log"
+
+	"github.com/nuvotlyuba/trading-engine/internal/app"
+)
 
 func main() {
-	fmt.Println("hi")
+	ctx := context.Background()
+
+	err := app.InitAndRun(ctx)
+	if err != nil {
+		log.Fatalf("Не удалось запустить приложение: %v", err)
+	}
 }
