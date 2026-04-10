@@ -35,7 +35,8 @@ func (c *Controller) Build() *chi.Mux {
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(castom_middleware.Logger(c.logger))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+	r2 := chi.NewRouter()
+	r2.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -44,6 +45,13 @@ func (c *Controller) Build() *chi.Mux {
 			router.Bind(r)
 		}
 	})
+
+	chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		c.logger.Info("endpoint registered", "method", method, "path", route)
+		return nil
+	})
+
+	r.Mount("/", r2)
 
 	return r
 }

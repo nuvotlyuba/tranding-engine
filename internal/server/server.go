@@ -37,7 +37,6 @@ func New(logger *slog.Logger, cfg config.HTTP, handler http.Handler) *Server {
 }
 
 func (s *Server) Run() error {
-	// Канал для ошибок сервера
 	serverErr := make(chan error, 1)
 
 	go func() {
