@@ -2,14 +2,19 @@ package orderbook
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 
+	"github.com/google/btree"
 	"github.com/google/uuid"
 	domain_order "github.com/nuvotlyuba/trading-engine/internal/domain/order"
 	"github.com/shopspring/decimal"
-	// github.com/google/btree
 )
+
+// orderbook_test.go — тестируй после:
+// AddOrder — добавление на новый уровень (проверь что BidKeys/AskKeys отсортированы), добавление на существующий уровень (проверь Total и длину Queue).
+// BestBid / BestAsk — пустой стакан, один уровень, несколько уровней (проверь что возвращается именно лучшая цена).
+// RemoveOrder — полное удаление ордера когда он единственный на уровне (уровень должен исчезнуть из map и из Keys), удаление одного из нескольких (уровень остаётся, Total уменьшился).
+// CancelOrder — после вызова статус ордера StatusCancelled и ордера нет в стакане.
 
 type PriceLevel struct {
 	Price decimal.Decimal       // Цена
@@ -28,22 +33,26 @@ func NewPriceLevel(order *domain_order.Order) *PriceLevel {
 
 type OrderBook struct { // стакан
 	Symbol  string
-	Bids    map[decimal.Decimal]*PriceLevel
-	BidKeys []decimal.Decimal //отсортирован по убыванию: [102, 101, 100]
+	Bids    map[string]*PriceLevel
+	BidTree *btree.BTreeG[decimal.Decimal] //отсортирован по убыванию: [102, 101, 100]
 
-	Asks    map[decimal.Decimal]*PriceLevel
-	AskKeys []decimal.Decimal // отсортированы по возрастанию: [103, 104, 105]
+	Asks    map[string]*PriceLevel
+	AskTree *btree.BTreeG[decimal.Decimal] // отсортированы по возрастанию: [103, 104, 105]
 
 	mu sync.RWMutex
 }
 
 func NewOrderBook(symbol string) *OrderBook {
 	return &OrderBook{
-		Symbol:  symbol,
-		Bids:    make(map[decimal.Decimal]*PriceLevel, 0),
-		BidKeys: make([]decimal.Decimal, 0),
-		Asks:    make(map[decimal.Decimal]*PriceLevel, 0),
-		AskKeys: make([]decimal.Decimal, 0),
+		Symbol: symbol,
+		Bids:   make(map[string]*PriceLevel, 0),
+		BidTree: btree.NewG[decimal.Decimal](32, func(a, b decimal.Decimal) bool {
+			return a.GreaterThan(b)
+		}),
+		Asks: make(map[string]*PriceLevel, 0),
+		AskTree: btree.NewG[decimal.Decimal](32, func(a, b decimal.Decimal) bool {
+			return a.LessThan(b)
+		}),
 	}
 }
 
@@ -51,19 +60,19 @@ func (ob *OrderBook) BestBid() (decimal.Decimal, bool) {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
 
-	if len(ob.BidKeys) == 0 {
+	if ob.BidTree.Len() == 0 {
 		return decimal.Zero, false
 	}
-	return ob.BidKeys[0], true
+	return ob.BidTree.Min()
 }
 
 func (ob *OrderBook) BestAsk() (decimal.Decimal, bool) {
 	ob.mu.RLock()
 	defer ob.mu.RUnlock()
-	if len(ob.AskKeys) == 0 {
+	if ob.AskTree.Len() == 0 {
 		return decimal.Zero, false
 	}
-	return ob.AskKeys[0], true
+	return ob.AskTree.Max()
 }
 
 func (ob *OrderBook) AddOrder(order *domain_order.Order) {
@@ -71,8 +80,8 @@ func (ob *OrderBook) AddOrder(order *domain_order.Order) {
 	defer ob.mu.Unlock()
 
 	if order.Side == domain_order.SideBuy {
-		if level, ok := ob.Bids[order.Price]; !ok {
-			ob.Bids[order.Price] = NewPriceLevel(order)
+		if level, ok := ob.Bids[order.Price.String()]; !ok {
+			ob.Bids[order.Price.String()] = NewPriceLevel(order)
 			ob.addKey(order.Price, order.Side)
 		} else {
 			level.Total = level.Total.Add(order.Remaining())
@@ -80,8 +89,8 @@ func (ob *OrderBook) AddOrder(order *domain_order.Order) {
 		}
 	}
 	if order.Side == domain_order.SideSell {
-		if level, ok := ob.Asks[order.Price]; !ok {
-			ob.Asks[order.Price] = NewPriceLevel(order)
+		if level, ok := ob.Asks[order.Price.String()]; !ok {
+			ob.Asks[order.Price.String()] = NewPriceLevel(order)
 			ob.addKey(order.Price, order.Side)
 		} else {
 			level.Total = level.Total.Add(order.Remaining())
@@ -95,15 +104,15 @@ func (ob *OrderBook) RemoveOrder(order *domain_order.Order) error {
 	defer ob.mu.Unlock()
 
 	if order.Side == domain_order.SideBuy {
-		level, ok := ob.Bids[order.Price]
+		level, ok := ob.Bids[order.Price.String()]
 		if !ok {
 			return fmt.Errorf("not found price level")
 		}
 		level.Total = level.Total.Sub(order.Remaining())
 		level.Queue = removeOrderFromQueue(level.Queue, order.ID)
 
-		if level.Total.IsZero() {
-			delete(ob.Bids, order.Price)
+		if level.Total.IsNegative() || level.Total.IsZero() {
+			delete(ob.Bids, order.Price.String())
 			ob.removeKey(order.Price, order.Side)
 		}
 
@@ -111,15 +120,15 @@ func (ob *OrderBook) RemoveOrder(order *domain_order.Order) error {
 	}
 
 	if order.Side == domain_order.SideSell {
-		level, ok := ob.Asks[order.Price]
+		level, ok := ob.Asks[order.Price.String()]
 		if !ok {
 			return fmt.Errorf("not found price level")
 		}
 		level.Total = level.Total.Sub(order.Remaining())
 		level.Queue = removeOrderFromQueue(level.Queue, order.ID)
 
-		if level.Total.IsZero() {
-			delete(ob.Asks, order.Price)
+		if level.Total.IsNegative() || level.Total.IsZero() {
+			delete(ob.Asks, order.Price.String())
 			ob.removeKey(order.Price, order.Side)
 		}
 
@@ -127,18 +136,12 @@ func (ob *OrderBook) RemoveOrder(order *domain_order.Order) error {
 	return nil
 }
 
-func (ob *OrderBook) addKey(key decimal.Decimal, side domain_order.Side) {
+func (ob *OrderBook) addKey(price decimal.Decimal, side domain_order.Side) {
 	switch side {
 	case domain_order.SideBuy:
-		ob.BidKeys = append(ob.BidKeys, key)
-		sort.Slice(ob.BidKeys, func(i, j int) bool {
-			return ob.BidKeys[i].GreaterThan(ob.BidKeys[j])
-		})
+		ob.BidTree.ReplaceOrInsert(price)
 	case domain_order.SideSell:
-		ob.AskKeys = append(ob.AskKeys, key)
-		sort.Slice(ob.AskKeys, func(i, j int) bool {
-			return ob.AskKeys[i].LessThan(ob.AskKeys[j])
-		})
+		ob.AskTree.ReplaceOrInsert(price)
 	}
 }
 
@@ -165,22 +168,12 @@ func removeOrderFromQueue(orders []*domain_order.Order, orderID uuid.UUID) []*do
 	return orders
 }
 
-func (ob *OrderBook) removeKey(key decimal.Decimal, side domain_order.Side) {
+func (ob *OrderBook) removeKey(price decimal.Decimal, side domain_order.Side) {
 	switch side {
 	case domain_order.SideBuy:
-		for i, k := range ob.BidKeys {
-			if k.Equal(key) {
-				ob.BidKeys = append(ob.BidKeys[:i], ob.BidKeys[i+1:]...)
-				return
-			}
-		}
+		ob.BidTree.Delete(price)
 	case domain_order.SideSell:
-		for i, k := range ob.AskKeys {
-			if k.Equal(key) {
-				ob.AskKeys = append(ob.AskKeys[:i], ob.AskKeys[i+1:]...)
-				return
-			}
-		}
+		ob.AskTree.Delete(price)
 	}
 }
 
