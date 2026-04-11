@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/nuvotlyuba/trading-engine/internal/config"
+	"github.com/nuvotlyuba/trading-engine/internal/infra/postgres"
 	"github.com/nuvotlyuba/trading-engine/internal/server"
 	controller "github.com/nuvotlyuba/trading-engine/internal/transport/http"
 	orderHndr "github.com/nuvotlyuba/trading-engine/internal/transport/http/handlers/order"
@@ -21,6 +22,17 @@ func InitAndRun(ctx context.Context) error {
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
+
+	db, err := postgres.New(ctx, cfg.Postgres)
+	if err != nil {
+		return fmt.Errorf("connect postgres: %w", err)
+	}
+	defer db.Close()
+	logger.Info("postgres connected",
+		"host", cfg.Postgres.Host,
+		"port", cfg.Postgres.Port,
+		"db", cfg.Postgres.DBName,
+	)
 
 	// 2. инфраструктура
 	// db := postgres.New(cfg.DSN)
