@@ -46,12 +46,12 @@ func NewOrderBook(symbol string) *OrderBook {
 	return &OrderBook{
 		Symbol: symbol,
 		Bids:   make(map[string]*PriceLevel, 0),
-		BidTree: btree.NewG[decimal.Decimal](32, func(a, b decimal.Decimal) bool {
-			return a.GreaterThan(b)
+		BidTree: btree.NewG(32, func(a, b decimal.Decimal) bool {
+			return a.LessThan(b)
 		}),
 		Asks: make(map[string]*PriceLevel, 0),
-		AskTree: btree.NewG[decimal.Decimal](32, func(a, b decimal.Decimal) bool {
-			return a.LessThan(b)
+		AskTree: btree.NewG(32, func(a, b decimal.Decimal) bool {
+			return a.GreaterThan(b)
 		}),
 	}
 }

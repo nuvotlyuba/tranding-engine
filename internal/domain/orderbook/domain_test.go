@@ -1,7 +1,6 @@
 package orderbook
 
 import (
-	"fmt"
 	"testing"
 
 	domain_order "github.com/nuvotlyuba/trading-engine/internal/domain/order"
@@ -97,7 +96,7 @@ func TestAddOrder_TwoOrdersInOneLevel(t *testing.T) {
 	t.Logf("after order2: len(Queue)=%d, Total=%s",
 		len(ob.Bids[order1.Price.String()].Queue),
 		ob.Bids[order1.Price.String()].Total)
-	fmt.Println(order1.Price, order2.Price)
+
 	level, ok := ob.Bids[order1.Price.String()]
 	if !ok {
 		t.Fatal("expected price level to exist in Bids")
@@ -112,7 +111,7 @@ func TestAddOrder_TwoOrdersInOneLevel(t *testing.T) {
 	}
 }
 
-func TestAddOrder_TwoOrdersInDifferentLevel(t *testing.T) {
+func TestAddOrder_BidOrdersInDifferentLevel(t *testing.T) {
 	ob := NewOrderBook("BTCUSDT")
 	order1 := domain_order.NewOrder(
 		"BTCUSDT",
@@ -125,31 +124,405 @@ func TestAddOrder_TwoOrdersInDifferentLevel(t *testing.T) {
 	order2 := domain_order.NewOrder(
 		"BTCUSDT",
 		domain_order.SideBuy,
-		decimal.NewFromInt(100),
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order3 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(102),
 		decimal.NewFromInt(10),
 		domain_order.OrderTypeLimit,
 	)
 
 	ob.AddOrder(order1)
-	t.Logf("after order1: len(Queue)=%d, Total=%s",
-		len(ob.Bids[order1.Price.String()].Queue),
-		ob.Bids[order1.Price.String()].Total)
-
 	ob.AddOrder(order2)
-	t.Logf("after order2: len(Queue)=%d, Total=%s",
-		len(ob.Bids[order1.Price.String()].Queue),
-		ob.Bids[order1.Price.String()].Total)
-	fmt.Println(order1.Price, order2.Price)
-	level, ok := ob.Bids[order1.Price.String()]
-	if !ok {
-		t.Fatal("expected price level to exist in Bids")
+	ob.AddOrder(order3)
+
+	min, _ := ob.BidTree.Min()
+	if min != order1.Price {
+		t.Errorf("Min = %s, want %v", min, order1.Price)
 	}
 
-	if len(level.Queue) != 2 {
-		t.Errorf("Queue len = %d, want 2", len(level.Queue))
+	max, _ := ob.BidTree.Max()
+	if max != order3.Price {
+		t.Errorf("Max= %s, want %v", min, order3.Price)
+	}
+}
+
+func TestAddOrder_AskOrdersInDifferentLevel(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order3 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(102),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(order1)
+	ob.AddOrder(order2)
+	ob.AddOrder(order3)
+
+	min, _ := ob.AskTree.Min()
+	if min != order3.Price {
+		t.Errorf("Min = %s, want %v", min, order3.Price)
 	}
 
-	if !level.Total.Equal(decimal.NewFromInt(20)) {
-		t.Errorf("Total = %s, want 20", level.Total)
+	max, _ := ob.AskTree.Max()
+	if max != order1.Price {
+		t.Errorf("Max= %s, want %v", min, order1.Price)
 	}
+}
+
+// BestBid / BestAsk
+// 1. пустой стакан → возвращает (Zero, false)
+// 2. один уровень → возвращает его цену и true
+// 3. несколько уровней → возвращает именно лучшую цену (максимум для bid, минимум для ask)
+func TestBestBid_EmptyOrderBook(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	bestBid, flag := ob.BestBid()
+	if !bestBid.IsZero() {
+		t.Errorf("BestBid = %d, want = %d", bestBid, decimal.Zero)
+	}
+	if !bestBid.IsZero() {
+		t.Errorf("Is existed BestBid = %v, want = false", flag)
+	}
+}
+func TestBestAsk_EmptyOrderBook(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	bestAsk, flag := ob.BestAsk()
+	if !bestAsk.IsZero() {
+		t.Errorf("BestAsk = %d, want = %d", bestAsk, decimal.Zero)
+	}
+	if flag {
+		t.Errorf("Is existed BestAsk = %v, want = true", flag)
+	}
+}
+
+func TestBestBid_OneLevelOrderBook(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	order := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(order)
+
+	bestBid, flag := ob.BestBid()
+	if bestBid.IsZero() {
+		t.Errorf("BestBid = %d, want = %d", bestBid, order.Price)
+	}
+	if !flag {
+		t.Errorf("Is existed BestBid = %v, want = true", flag)
+	}
+}
+
+func TestBestAsk_OneLevelOrderBook(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	order := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(order)
+
+	bestAsk, flag := ob.BestAsk()
+	if bestAsk.IsZero() {
+		t.Errorf("BestAsk = %d, want = %d", bestAsk, order.Price)
+	}
+	if !flag {
+		t.Errorf("Is existed BestAsk = %v, want = false", flag)
+	}
+}
+
+func TestBestAsk_TwolLevelOrderBook(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(order1)
+	ob.AddOrder(order2)
+
+	bestAsk, flag := ob.BestAsk()
+	if bestAsk.IsZero() {
+		t.Errorf("BestAsk = %d, want = %d", bestAsk, order1.Price)
+	}
+	if !flag {
+		t.Errorf("Is existed BestAsk = %v, want = true", flag)
+	}
+}
+
+func TestBestBid_TwoLevelOrderBook(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(order1)
+	ob.AddOrder(order2)
+
+	bestBid, flag := ob.BestBid()
+	if bestBid.IsZero() {
+		t.Errorf("BestBid = %d, want = %d", bestBid, order2.Price)
+	}
+	if !flag {
+		t.Errorf("Is existed BestBid = %v, want = true", flag)
+	}
+}
+
+// RemoveOrder
+// 1. удалить единственный ордер на уровне → уровень исчез из Bids/Asks и из BidKeys/AskKeys
+// 2. удалить один из двух ордеров на уровне → уровень остался, Total уменьшился, Queue длиной 1
+// 3. удалить ордер которого нет → возвращает ошибку
+
+func TestRemoveOrder_OnlyOneBidOrder(t *testing.T) {
+	order := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order)
+
+	err := ob.RemoveOrder(order)
+	if err != nil {
+		t.Errorf("RemoveOrder() = %v, want nil", err)
+	}
+	if len(ob.Bids) != 0 {
+		t.Errorf("len(ob.Bids) = %v, want 0", len(ob.Bids))
+	}
+	_, flag := ob.BidTree.Min()
+	if flag {
+		t.Errorf("Is existed BestBid = %v, want false", flag)
+	}
+}
+
+func TestRemoveOrder_OnlyOneAskOrder(t *testing.T) {
+	order := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order)
+
+	err := ob.RemoveOrder(order)
+	if err != nil {
+		t.Errorf("RemoveOrder() = %v, want nil", err)
+	}
+	if len(ob.Asks) != 0 {
+		t.Errorf("len(ob.Bids) = %v, want 0", len(ob.Bids))
+	}
+	_, flag := ob.AskTree.Max()
+	if flag {
+		t.Errorf("Is existed BestBid = %v, want false", flag)
+	}
+}
+
+func TestRemoveOrder_TwoBidOrder(t *testing.T) {
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order1)
+	ob.AddOrder(order2)
+
+	err := ob.RemoveOrder(order1)
+	if err != nil {
+		t.Errorf("RemoveOrder() = %v, want nil", err)
+	}
+	if len(ob.Bids) != 1 {
+		t.Errorf("len(ob.Bids) = %v, want 1", len(ob.Bids))
+	}
+	_, flag := ob.BidTree.Min()
+	if !flag {
+		t.Errorf("Is existed BestBid = %v, want true", flag)
+	}
+}
+
+func TestRemoveOrder_TwoAskOrder(t *testing.T) {
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order1)
+	ob.AddOrder(order2)
+
+	err := ob.RemoveOrder(order1)
+	if err != nil {
+		t.Errorf("RemoveOrder() = %v, want nil", err)
+	}
+	if len(ob.Asks) != 1 {
+		t.Errorf("len(ob.Asks) = %v, want 1", len(ob.Asks))
+	}
+	_, flag := ob.AskTree.Max()
+	if !flag {
+		t.Errorf("Is existed BestAsk = %v, want true", flag)
+	}
+}
+
+func TestRemoveOrder_NotExistedOrder(t *testing.T) {
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order1)
+
+	err := ob.RemoveOrder(order2)
+	if err == nil {
+		t.Errorf("RemoveOrder() = nil, want err")
+	}
+}
+
+// CancelOrder
+// 1. после вызова → статус ордера StatusCancelled
+// 2. после вызова → ордера нет в стакане
+
+func TestCancelOrder_StatusCancelled(t *testing.T) {
+	order := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order)
+
+	err := ob.CancelOrder(order)
+	if err != nil {
+		t.Errorf("CancelOrder() = %v, want nil", err)
+	}
+
+	if order.Status != domain_order.StatusCancelled {
+		t.Errorf("Order status = %s, want = %s", order.Status, domain_order.StatusCancelled)
+	}
+}
+
+func TestCancelOrder_OrderNotExistedInOrderBook(t *testing.T) {
+	order1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	order2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob := NewOrderBook("BTCUSDT")
+	ob.AddOrder(order1)
+
+	err := ob.CancelOrder(order2)
+	if err == nil {
+		t.Errorf("CancelOrder() = nil, want err")
+	}
+
 }
