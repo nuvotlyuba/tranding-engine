@@ -28,7 +28,7 @@ func TestAddOrder_NewBidLevel(t *testing.T) {
 	}
 	key, _ := ob.BidTree.Min()
 	if !key.Equal(order.Price) {
-		t.Errorf("BidKeys[0] = %s, want = %s", level.Total, order.Quantity)
+		t.Errorf("BidTree.Min() = %s, want %s", key, order.Price)
 	}
 	if !level.Total.Equal(order.Quantity) {
 		t.Errorf("Total = %s, want %s", level.Total, order.Quantity)
@@ -57,9 +57,9 @@ func TestAddOrder_NewAskLevel(t *testing.T) {
 	if len(ob.Asks) != 1 {
 		t.Errorf("AskKeys len = %d, want 1", ob.AskTree.Len())
 	}
-	key, _ := ob.AskTree.Max()
+	key, _ := ob.AskTree.Min()
 	if !key.Equal(order.Price) {
-		t.Errorf("AskKeys[0] = %s, want = %s", level.Total, order.Quantity)
+		t.Errorf("AskKeys.Min() = %s, want = %s", level.Total, order.Quantity)
 	}
 	if !level.Total.Equal(order.Quantity) {
 		t.Errorf("Total = %s, want %s", level.Total, order.Quantity)
@@ -142,13 +142,13 @@ func TestAddOrder_BidOrdersInDifferentLevel(t *testing.T) {
 	ob.AddOrder(order3)
 
 	min, _ := ob.BidTree.Min()
-	if min != order1.Price {
-		t.Errorf("Min = %s, want %v", min, order1.Price)
+	if !min.Equal(order3.Price) {
+		t.Errorf("Min = %s, want %v", min, order3.Price)
 	}
 
 	max, _ := ob.BidTree.Max()
-	if max != order3.Price {
-		t.Errorf("Max= %s, want %v", min, order3.Price)
+	if !max.Equal(order1.Price) {
+		t.Errorf("Max= %s, want %v", max, order1.Price)
 	}
 }
 
@@ -183,13 +183,13 @@ func TestAddOrder_AskOrdersInDifferentLevel(t *testing.T) {
 	ob.AddOrder(order3)
 
 	min, _ := ob.AskTree.Min()
-	if min != order3.Price {
-		t.Errorf("Min = %s, want %v", min, order3.Price)
+	if !min.Equal(order1.Price) {
+		t.Errorf("Min = %s, want %v", min, order1.Price)
 	}
 
 	max, _ := ob.AskTree.Max()
-	if max != order1.Price {
-		t.Errorf("Max= %s, want %v", min, order1.Price)
+	if !max.Equal(order3.Price) {
+		t.Errorf("Max= %s, want %v", max, order3.Price)
 	}
 }
 
@@ -202,10 +202,10 @@ func TestBestBid_EmptyOrderBook(t *testing.T) {
 
 	bestBid, flag := ob.BestBid()
 	if !bestBid.IsZero() {
-		t.Errorf("BestBid = %d, want = %d", bestBid, decimal.Zero)
+		t.Errorf("BestBid = %s, want = %s", bestBid, decimal.Zero)
 	}
-	if !bestBid.IsZero() {
-		t.Errorf("Is existed BestBid = %v, want = false", flag)
+	if flag {
+		t.Errorf("BestBid flag = %v, want false", flag)
 	}
 }
 func TestBestAsk_EmptyOrderBook(t *testing.T) {
@@ -213,10 +213,10 @@ func TestBestAsk_EmptyOrderBook(t *testing.T) {
 
 	bestAsk, flag := ob.BestAsk()
 	if !bestAsk.IsZero() {
-		t.Errorf("BestAsk = %d, want = %d", bestAsk, decimal.Zero)
+		t.Errorf("BestAsk = %s, want = %s", bestAsk, decimal.Zero)
 	}
 	if flag {
-		t.Errorf("Is existed BestAsk = %v, want = true", flag)
+		t.Errorf("BestAsk flag = %v, want false", flag)
 	}
 }
 
@@ -234,8 +234,8 @@ func TestBestBid_OneLevelOrderBook(t *testing.T) {
 	ob.AddOrder(order)
 
 	bestBid, flag := ob.BestBid()
-	if bestBid.IsZero() {
-		t.Errorf("BestBid = %d, want = %d", bestBid, order.Price)
+	if !bestBid.Equal(order.Price) {
+		t.Errorf("BestBid = %s, want %s", bestBid, order.Price)
 	}
 	if !flag {
 		t.Errorf("Is existed BestBid = %v, want = true", flag)
@@ -256,15 +256,15 @@ func TestBestAsk_OneLevelOrderBook(t *testing.T) {
 	ob.AddOrder(order)
 
 	bestAsk, flag := ob.BestAsk()
-	if bestAsk.IsZero() {
-		t.Errorf("BestAsk = %d, want = %d", bestAsk, order.Price)
+	if !bestAsk.Equal(order.Price) {
+		t.Errorf("BestAsk = %s, want %s", bestAsk, order.Price)
 	}
 	if !flag {
 		t.Errorf("Is existed BestAsk = %v, want = false", flag)
 	}
 }
 
-func TestBestAsk_TwolLevelOrderBook(t *testing.T) {
+func TestBestAsk_TwoLevelOrderBook(t *testing.T) {
 	ob := NewOrderBook("BTCUSDT")
 
 	order1 := domain_order.NewOrder(
@@ -286,8 +286,8 @@ func TestBestAsk_TwolLevelOrderBook(t *testing.T) {
 	ob.AddOrder(order2)
 
 	bestAsk, flag := ob.BestAsk()
-	if bestAsk.IsZero() {
-		t.Errorf("BestAsk = %d, want = %d", bestAsk, order1.Price)
+	if !bestAsk.Equal(order1.Price) {
+		t.Errorf("BestAsk = %s, want = %s", bestAsk, order1.Price)
 	}
 	if !flag {
 		t.Errorf("Is existed BestAsk = %v, want = true", flag)
@@ -317,8 +317,8 @@ func TestBestBid_TwoLevelOrderBook(t *testing.T) {
 	ob.AddOrder(order2)
 
 	bestBid, flag := ob.BestBid()
-	if bestBid.IsZero() {
-		t.Errorf("BestBid = %d, want = %d", bestBid, order2.Price)
+	if !bestBid.Equal(order2.Price) {
+		t.Errorf("BestBid = %s, want = %s", bestBid, order2.Price)
 	}
 	if !flag {
 		t.Errorf("Is existed BestBid = %v, want = true", flag)
@@ -372,7 +372,7 @@ func TestRemoveOrder_OnlyOneAskOrder(t *testing.T) {
 		t.Errorf("RemoveOrder() = %v, want nil", err)
 	}
 	if len(ob.Asks) != 0 {
-		t.Errorf("len(ob.Bids) = %v, want 0", len(ob.Bids))
+		t.Errorf("len(ob.Asks) = %v, want 0", len(ob.Asks))
 	}
 	_, flag := ob.AskTree.Max()
 	if flag {
@@ -392,8 +392,8 @@ func TestRemoveOrder_TwoBidOrder(t *testing.T) {
 	order2 := domain_order.NewOrder(
 		"BTCUSDT",
 		domain_order.SideBuy,
-		decimal.NewFromInt(101),
-		decimal.NewFromInt(10),
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(5),
 		domain_order.OrderTypeLimit,
 	)
 
@@ -405,12 +405,15 @@ func TestRemoveOrder_TwoBidOrder(t *testing.T) {
 	if err != nil {
 		t.Errorf("RemoveOrder() = %v, want nil", err)
 	}
-	if len(ob.Bids) != 1 {
-		t.Errorf("len(ob.Bids) = %v, want 1", len(ob.Bids))
+	level, ok := ob.Bids[order1.Price.String()]
+	if !ok {
+		t.Fatal("price level should still exist")
 	}
-	_, flag := ob.BidTree.Min()
-	if !flag {
-		t.Errorf("Is existed BestBid = %v, want true", flag)
+	if len(level.Queue) != 1 {
+		t.Errorf("Queue len = %d, want 1", len(level.Queue))
+	}
+	if !level.Total.Equal(decimal.NewFromInt(5)) {
+		t.Errorf("Total = %s, want 5", level.Total)
 	}
 }
 
