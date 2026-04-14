@@ -10,12 +10,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// orderbook_test.go — тестируй после:
-// AddOrder — добавление на новый уровень (проверь что BidKeys/AskKeys отсортированы), добавление на существующий уровень (проверь Total и длину Queue).
-// BestBid / BestAsk — пустой стакан, один уровень, несколько уровней (проверь что возвращается именно лучшая цена).
-// RemoveOrder — полное удаление ордера когда он единственный на уровне (уровень должен исчезнуть из map и из Keys), удаление одного из нескольких (уровень остаётся, Total уменьшился).
-// CancelOrder — после вызова статус ордера StatusCancelled и ордера нет в стакане.
-
 type PriceLevel struct {
 	Price decimal.Decimal       // Цена
 	Total decimal.Decimal       // Суммарный объем
@@ -47,11 +41,11 @@ func NewOrderBook(symbol string) *OrderBook {
 		Symbol: symbol,
 		Bids:   make(map[string]*PriceLevel, 0),
 		BidTree: btree.NewG(32, func(a, b decimal.Decimal) bool {
-			return a.LessThan(b)
+			return a.GreaterThan(b)
 		}),
 		Asks: make(map[string]*PriceLevel, 0),
 		AskTree: btree.NewG(32, func(a, b decimal.Decimal) bool {
-			return a.GreaterThan(b)
+			return a.LessThan(b)
 		}),
 	}
 }
