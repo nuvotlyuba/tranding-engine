@@ -59,7 +59,7 @@ func TestAddOrder_NewAskLevel(t *testing.T) {
 	}
 	key, _ := ob.AskTree.Min()
 	if !key.Equal(order.Price) {
-		t.Errorf("AskKeys.Min() = %s, want = %s", level.Total, order.Quantity)
+		t.Errorf("AskKeys.Min() = %s, want = %s", key, order.Price)
 	}
 	if !level.Total.Equal(order.Quantity) {
 		t.Errorf("Total = %s, want %s", level.Total, order.Quantity)
@@ -260,7 +260,7 @@ func TestBestAsk_OneLevelOrderBook(t *testing.T) {
 		t.Errorf("BestAsk = %s, want %s", bestAsk, order.Price)
 	}
 	if !flag {
-		t.Errorf("Is existed BestAsk = %v, want = false", flag)
+		t.Errorf("BestAsk flag = %v, want true", flag)
 	}
 }
 
