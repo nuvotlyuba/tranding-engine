@@ -3,10 +3,12 @@ package orderbook
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/btree"
 	"github.com/google/uuid"
 	domain_order "github.com/nuvotlyuba/trading-engine/internal/domain/order"
+	domain_trade "github.com/nuvotlyuba/trading-engine/internal/domain/trade"
 	"github.com/shopspring/decimal"
 )
 
@@ -186,3 +188,122 @@ func (ob *OrderBook) removeKey(price decimal.Decimal, side domain_order.Side) {
 3. Повторяем пока входящий ордер не исполнен или asks не кончились
 4. Если у входящего остался остаток — добавляем его в Bids
 */
+
+func (ob *OrderBook) Matching(order *domain_order.Order) (*domain_trade.MatchResult, error) {
+	ob.mu.Lock()
+	defer ob.mu.Unlock()
+
+	var trades []domain_trade.Trade
+	var updatedLevels []decimal.Decimal
+	var filledOrder *domain_order.Order
+
+	switch order.Side {
+	case domain_order.SideBuy:
+		for !order.Remaining().IsZero() && ob.AskTree.Len() > 0 {
+			bestAskPrice, ok := ob.BestAsk()
+			if !ok {
+				return nil, nil
+			}
+
+			if order.Type == domain_order.OrderTypeLimit && order.Price.LessThan(bestAskPrice) {
+				break
+			}
+
+			level, _ := ob.Asks[bestAskPrice.String()]
+
+			for len(level.Queue) > 0 && order.Remaining().IsPositive() {
+				resting := level.Queue[0]
+
+				tradeQty := decimal.Min(order.Remaining(), resting.Remaining())
+				order.Fill(tradeQty)
+				resting.Fill(tradeQty)
+
+				trade := domain_trade.Trade{
+					ID:          uuid.New(),
+					Symbol:      order.Symbol,
+					BuyOrderID:  order.ID,
+					SellOrderID: resting.ID,
+					Price:       bestAskPrice,
+					Quantity:    tradeQty,
+					ExecutedAt:  time.Now().UTC(),
+				}
+
+				level.Total = level.Total.Sub(tradeQty)
+
+				if resting.IsFilled() {
+					level.Queue = level.Queue[1:]
+				}
+
+				if len(level.Queue) == 0 {
+					delete(ob.Asks, bestAskPrice.String())
+					ob.removeKey(order.Price, domain_order.SideSell)
+				}
+
+				updatedLevels = append(updatedLevels, bestAskPrice)
+				trades = append(trades, trade)
+			}
+
+		}
+
+	case domain_order.SideSell:
+		for !order.Remaining().IsZero() && ob.BidTree.Len() > 0 {
+			bestBidPrice, ok := ob.BestBid()
+			if !ok {
+				return nil, nil
+			}
+
+			if order.Price.IsZero() && order.Price.LessThan(bestBidPrice) {
+				break // Не можем исполнить, цена слишком низкая
+			}
+
+			level, _ := ob.Bids[bestBidPrice.String()]
+
+			for len(level.Queue) > 0 && order.Remaining().IsPositive() {
+				resting := level.Queue[0]
+
+				tradeQty := decimal.Min(order.Remaining(), resting.Remaining())
+				err := order.Fill(tradeQty)
+				if err != nil {
+					return nil, err
+				}
+				err = resting.Fill(tradeQty)
+				if err != nil {
+					return nil, err
+				}
+
+				trade := domain_trade.Trade{
+					ID:          uuid.New(),
+					Symbol:      order.Symbol,
+					BuyOrderID:  resting.ID,
+					SellOrderID: order.ID,
+					Price:       bestBidPrice,
+					Quantity:    tradeQty,
+					ExecutedAt:  time.Now().UTC(),
+				}
+
+				level.Total = level.Total.Sub(tradeQty)
+
+				if resting.IsFilled() {
+					level.Queue = level.Queue[1:]
+				}
+
+				if len(level.Queue) == 0 {
+					delete(ob.Bids, order.Price.String())
+					ob.removeKey(order.Price, domain_order.SideBuy)
+				}
+
+				updatedLevels = append(updatedLevels, bestBidPrice)
+				trades = append(trades, trade)
+			}
+		}
+		if !order.Remaining().IsZero() && order.Type == domain_order.OrderTypeLimit {
+			ob.AddOrder(order)
+		}
+	}
+
+	return &domain_trade.MatchResult{
+		Trades:        trades,
+		UpdatedLevels: updatedLevels,
+		FilledOrder:   filledOrder,
+	}, nil
+}

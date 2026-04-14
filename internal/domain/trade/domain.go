@@ -3,15 +3,16 @@ package trade
 import (
 	"time"
 
+	"github.com/google/uuid"
 	domain_order "github.com/nuvotlyuba/trading-engine/internal/domain/order"
 	"github.com/shopspring/decimal"
 )
 
 type Trade struct {
-	ID          string
+	ID          uuid.UUID
 	Symbol      string
-	BuyOrderID  string
-	SellOrderID string
+	BuyOrderID  uuid.UUID
+	SellOrderID uuid.UUID
 	Price       decimal.Decimal
 	Quantity    decimal.Decimal
 	ExecutedAt  time.Time
