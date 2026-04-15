@@ -75,6 +75,10 @@ func (ob *OrderBook) AddOrder(order *domain_order.Order) {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
 
+	ob.addOrder(order)
+}
+
+func (ob *OrderBook) addOrder(order *domain_order.Order) {
 	if order.Side == domain_order.SideBuy {
 		if level, ok := ob.Bids[order.Price.String()]; !ok {
 			ob.Bids[order.Price.String()] = NewPriceLevel(order)
@@ -108,10 +112,8 @@ func (ob *OrderBook) RemoveOrder(order *domain_order.Order) error {
 		level.Queue = removeOrderFromQueue(level.Queue, order.ID)
 
 		if level.Total.IsNegative() || level.Total.IsZero() {
-			delete(ob.Bids, order.Price.String())
-			ob.removeKey(order.Price, order.Side)
+			ob.removeLevel(level.Price, order.Side)
 		}
-
 		return nil
 	}
 
@@ -124,8 +126,7 @@ func (ob *OrderBook) RemoveOrder(order *domain_order.Order) error {
 		level.Queue = removeOrderFromQueue(level.Queue, order.ID)
 
 		if level.Total.IsNegative() || level.Total.IsZero() {
-			delete(ob.Asks, order.Price.String())
-			ob.removeKey(order.Price, order.Side)
+			ob.removeLevel(level.Price, order.Side)
 		}
 
 	}
@@ -164,11 +165,13 @@ func removeOrderFromQueue(orders []*domain_order.Order, orderID uuid.UUID) []*do
 	return orders
 }
 
-func (ob *OrderBook) removeKey(price decimal.Decimal, side domain_order.Side) {
+func (ob *OrderBook) removeLevel(price decimal.Decimal, side domain_order.Side) {
 	switch side {
 	case domain_order.SideBuy:
+		delete(ob.Bids, price.String())
 		ob.BidTree.Delete(price)
 	case domain_order.SideSell:
+		delete(ob.Asks, price.String())
 		ob.AskTree.Delete(price)
 	}
 }
@@ -195,29 +198,35 @@ func (ob *OrderBook) Matching(order *domain_order.Order) (*domain_trade.MatchRes
 
 	var trades []domain_trade.Trade
 	var updatedLevels []decimal.Decimal
-	var filledOrder *domain_order.Order
+	updatedSet := map[string]decimal.Decimal{}
 
 	switch order.Side {
 	case domain_order.SideBuy:
 		for !order.Remaining().IsZero() && ob.AskTree.Len() > 0 {
-			bestAskPrice, ok := ob.BestAsk()
+			bestAskPrice, ok := ob.AskTree.Min()
 			if !ok {
-				return nil, nil
+				return &domain_trade.MatchResult{FilledOrder: order}, nil
 			}
 
 			if order.Type == domain_order.OrderTypeLimit && order.Price.LessThan(bestAskPrice) {
 				break
 			}
 
-			level, _ := ob.Asks[bestAskPrice.String()]
+			level, ok := ob.Asks[bestAskPrice.String()]
+			if !ok {
+				return nil, fmt.Errorf("inconsistent state: ask level not found")
+			}
 
 			for len(level.Queue) > 0 && order.Remaining().IsPositive() {
 				resting := level.Queue[0]
 
 				tradeQty := decimal.Min(order.Remaining(), resting.Remaining())
-				order.Fill(tradeQty)
-				resting.Fill(tradeQty)
-
+				if err := order.Fill(tradeQty); err != nil {
+					return nil, err
+				}
+				if err := resting.Fill(tradeQty); err != nil {
+					return nil, err
+				}
 				trade := domain_trade.Trade{
 					ID:          uuid.New(),
 					Symbol:      order.Symbol,
@@ -235,25 +244,29 @@ func (ob *OrderBook) Matching(order *domain_order.Order) (*domain_trade.MatchRes
 				}
 
 				if len(level.Queue) == 0 {
-					delete(ob.Asks, bestAskPrice.String())
-					ob.removeKey(order.Price, domain_order.SideSell)
+					ob.removeLevel(bestAskPrice, domain_order.SideSell)
 				}
-
-				updatedLevels = append(updatedLevels, bestAskPrice)
+				updatedSet[bestAskPrice.String()] = bestAskPrice
 				trades = append(trades, trade)
 			}
-
+		}
+		if !order.Remaining().IsZero() && order.Type == domain_order.OrderTypeLimit {
+			ob.addOrder(order)
+		}
+		for _, price := range updatedSet {
+			updatedLevels = append(updatedLevels, price)
 		}
 
 	case domain_order.SideSell:
 		for !order.Remaining().IsZero() && ob.BidTree.Len() > 0 {
-			bestBidPrice, ok := ob.BestBid()
+			// BidTree отсортирован по убыванию, поэтому Min() = максимальная цена = BestBid
+			bestBidPrice, ok := ob.BidTree.Min()
 			if !ok {
 				return nil, nil
 			}
 
-			if order.Price.IsZero() && order.Price.LessThan(bestBidPrice) {
-				break // Не можем исполнить, цена слишком низкая
+			if order.Type == domain_order.OrderTypeLimit && order.Price.GreaterThan(bestBidPrice) {
+				break
 			}
 
 			level, _ := ob.Bids[bestBidPrice.String()]
@@ -262,15 +275,12 @@ func (ob *OrderBook) Matching(order *domain_order.Order) (*domain_trade.MatchRes
 				resting := level.Queue[0]
 
 				tradeQty := decimal.Min(order.Remaining(), resting.Remaining())
-				err := order.Fill(tradeQty)
-				if err != nil {
+				if err := order.Fill(tradeQty); err != nil {
 					return nil, err
 				}
-				err = resting.Fill(tradeQty)
-				if err != nil {
+				if err := resting.Fill(tradeQty); err != nil {
 					return nil, err
 				}
-
 				trade := domain_trade.Trade{
 					ID:          uuid.New(),
 					Symbol:      order.Symbol,
@@ -288,22 +298,24 @@ func (ob *OrderBook) Matching(order *domain_order.Order) (*domain_trade.MatchRes
 				}
 
 				if len(level.Queue) == 0 {
-					delete(ob.Bids, order.Price.String())
-					ob.removeKey(order.Price, domain_order.SideBuy)
+					ob.removeLevel(bestBidPrice, domain_order.SideBuy)
 				}
 
-				updatedLevels = append(updatedLevels, bestBidPrice)
+				updatedSet[bestBidPrice.String()] = bestBidPrice
 				trades = append(trades, trade)
 			}
 		}
 		if !order.Remaining().IsZero() && order.Type == domain_order.OrderTypeLimit {
-			ob.AddOrder(order)
+			ob.addOrder(order)
+		}
+		for _, price := range updatedSet {
+			updatedLevels = append(updatedLevels, price)
 		}
 	}
 
 	return &domain_trade.MatchResult{
 		Trades:        trades,
 		UpdatedLevels: updatedLevels,
-		FilledOrder:   filledOrder,
+		FilledOrder:   order,
 	}, nil
 }
