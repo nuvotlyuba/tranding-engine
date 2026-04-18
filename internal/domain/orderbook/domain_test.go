@@ -712,8 +712,145 @@ func TestMatching_SellLimit_OneBid_RemoveLevel(t *testing.T) {
 }
 
 // 5. buy limit — частичное исполнение → 1 trade, входящий ордер частично filled и добавлен в стакан
+func TestMatching_BuyLimit_PartitionalFilled(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(102),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	orderAsk := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(5),
+		domain_order.OrderTypeLimit,
+	)
+	ob.AddOrder(orderAsk)
+
+	result, err := ob.Matching(incoming)
+
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
+	}
+
+	if len(result.Trades) != 1 {
+		t.Errorf("Len trades = %d, want 1", len(result.Trades))
+	}
+
+	if result.Trades[0].BuyOrderID != incoming.ID {
+		t.Errorf("BuyOrderID = %s, want = %s", result.Trades[0].BuyOrderID, incoming.ID)
+	}
+
+	if result.Trades[0].SellOrderID != orderAsk.ID {
+		t.Errorf("SellOrderID = %s, want = %s", result.Trades[0].SellOrderID, orderAsk.ID)
+	}
+
+	if incoming.Status != domain_order.StatusPartiallyFilled {
+		t.Errorf("incoming order status = %s, want = %s", incoming.Status, domain_order.StatusPartiallyFilled)
+	}
+
+	if orderAsk.Status != domain_order.StatusFilled {
+		t.Errorf("order ask status = %s, want = %s", orderAsk.Status, domain_order.StatusFilled)
+	}
+
+	if ob.Bids[incoming.Price.String()].Total != incoming.Remaining() {
+		t.Errorf("incoming order qty in orderbook = %d, want = %d", ob.Bids[incoming.Price.String()].Total, incoming.Remaining())
+	}
+
+	level, ok := ob.Bids[incoming.Price.String()]
+	if !ok {
+		t.Fatal("expected order to be added to Bids")
+	}
+	if len(level.Queue) != 1 {
+		t.Errorf("Queue len = %d, want 1", len(level.Queue))
+	}
+}
+
 // 6. buy limit — цена ниже лучшего ask → матчинга нет, ордер добавляется в стакан
+func TestMatching_BuyLimit_NoMatching(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	orderAsk := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+	ob.AddOrder(orderAsk)
+
+	result, err := ob.Matching(incoming)
+
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
+	}
+
+	if len(result.Trades) != 0 {
+		t.Errorf("Len trades = %d, want 0", len(result.Trades))
+	}
+
+	level, ok := ob.Bids[incoming.Price.String()]
+	if !ok {
+		t.Fatal("expected order to be added to Bids")
+	}
+	if len(level.Queue) != 1 {
+		t.Errorf("Queue len = %d, want 1", len(level.Queue))
+	}
+
+}
+
 // 7. sell limit — цена выше лучшего bid → матчинга нет, ордер добавляется в стакан
+func TestMatching_SellLimit_NoMatching(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(101),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+
+	orderAsk := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(10),
+		domain_order.OrderTypeLimit,
+	)
+	ob.AddOrder(orderAsk)
+
+	result, err := ob.Matching(incoming)
+
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
+	}
+
+	if len(result.Trades) != 0 {
+		t.Errorf("Len trades = %d, want 0", len(result.Trades))
+	}
+
+	level, ok := ob.Asks[incoming.Price.String()]
+	if !ok {
+		t.Fatal("expected order to be added to Asks")
+	}
+	if len(level.Queue) != 1 {
+		t.Errorf("Queue len = %d, want 1", len(level.Queue))
+	}
+}
 
 // Сложные сценарии:
 // 8. buy limit съедает несколько уровней asks → несколько trades, все уровни удалены
