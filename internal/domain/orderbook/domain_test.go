@@ -2,8 +2,10 @@ package orderbook
 
 import (
 	"testing"
+	"time"
 
 	domain_order "github.com/nuvotlyuba/trading-engine/internal/domain/order"
+	domain_trade "github.com/nuvotlyuba/trading-engine/internal/domain/trade"
 	"github.com/shopspring/decimal"
 )
 
@@ -853,8 +855,212 @@ func TestMatching_SellLimit_NoMatching(t *testing.T) {
 }
 
 // Сложные сценарии:
+
 // 8. buy limit съедает несколько уровней asks → несколько trades, все уровни удалены
+func TestMatching_BuyLimit_SeveralTrades(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(150),
+		domain_order.OrderTypeLimit,
+	)
+
+	orderAsk1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(99),
+		decimal.NewFromInt(50),
+		domain_order.OrderTypeLimit,
+	)
+	orderAsk2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(98),
+		decimal.NewFromInt(100),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(orderAsk1)
+	ob.AddOrder(orderAsk2)
+
+	result, err := ob.Matching(incoming)
+	if err != nil {
+		t.Errorf("Metching() err = %v, want nil", err)
+	}
+
+	if len(result.Trades) != 2 {
+		t.Errorf("Trades count = %d, want 2", len(result.Trades))
+	}
+
+	_, ok := ob.Asks[orderAsk1.Price.String()]
+	if ok {
+		t.Fatal("there are no level in Asks")
+	}
+
+	_, ok = ob.Asks[orderAsk2.Price.String()]
+	if ok {
+		t.Fatal("there are no level in Asks")
+	}
+
+	if !incoming.IsFilled() {
+		t.Errorf("incoming.IsFilled = %v, want true", incoming.IsFilled())
+	}
+}
+
 // 9. buy limit — встречный ордер больше входящего → входящий filled полностью, встречный частично остаётся в стакане
+func TestMatching_BuyLimit_AsksOrderGetherincoming(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(150),
+		domain_order.OrderTypeLimit,
+	)
+
+	orderAsk := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(90),
+		decimal.NewFromInt(200),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.addOrder(orderAsk)
+
+	result, err := ob.Matching(incoming)
+	if err != nil {
+		t.Errorf("Metching() err = %v, want nil", err)
+	}
+
+	if len(result.Trades) != 1 {
+		t.Errorf("Trades count = %d, want 1", len(result.Trades))
+	}
+
+	level, ok := ob.Asks[orderAsk.Price.String()]
+	if !ok {
+		t.Fatal("expected order to be added to Asks")
+	}
+	if len(level.Queue) != 1 {
+		t.Errorf("Queue len = %d, want 1", len(level.Queue))
+	}
+
+	if !level.Total.Equal(orderAsk.Remaining()) {
+		t.Errorf("Total = %s, want 50", level.Total)
+	}
+}
+
 // 10. два ордера на одном уровне — входящий съедает первый полностью и частично второй → FIFO соблюдён
+func TestMatching_BuyLimit_TwoOrderInOneLevel(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(100),
+		domain_order.OrderTypeLimit,
+	)
+
+	orderAsk1 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(50),
+		domain_order.OrderTypeLimit,
+	)
+
+	time.Sleep(2 * time.Second)
+
+	orderAsk2 := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(70),
+		domain_order.OrderTypeLimit,
+	)
+
+	ob.AddOrder(orderAsk1)
+	ob.AddOrder(orderAsk2)
+
+	result, err := ob.Matching(incoming)
+	if err != nil {
+		t.Errorf("Metching() err = %v, want nil", err)
+	}
+
+	if len(result.Trades) != 2 {
+		t.Errorf("Trades count = %d, want 2", len(result.Trades))
+	}
+
+	level, ok := ob.Asks[incoming.Price.String()]
+	if !ok {
+		t.Fatal("expected order to be added to Asks")
+	}
+	if len(level.Queue) != 1 {
+		t.Errorf("Queue len = %d, want 1", len(level.Queue))
+	}
+
+	if !level.Total.Equal(orderAsk2.Remaining()) {
+		t.Errorf("Total = %s, want 20", level.Total)
+	}
+	var trade1 domain_trade.Trade
+	var trade2 domain_trade.Trade
+
+	for _, trade := range result.Trades {
+		if trade.SellOrderID == orderAsk1.ID {
+			trade1 = trade
+		} else {
+			trade2 = trade
+		}
+	}
+
+	if trade1.ExecutedAt.After(trade2.ExecutedAt) {
+		t.Errorf("FIFO is not expected")
+	}
+}
+
 // 11. market buy — исполняется по любой цене независимо от bestAsk → trade создан
+func TestMatching_MarketBuy_OneTrade(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(100),
+		domain_order.OrderTypeMarket,
+	)
+
+	orderAsk := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(100),
+		domain_order.OrderTypeMarket,
+	)
+}
+
 // 12. market sell — исполняется по любой цене независимо от bestBid → trade создан
+func TestMatching_MarketSell_OneTrade(t *testing.T) {
+	ob := NewOrderBook("BTCUSDT")
+
+	incoming := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideSell,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(100),
+		domain_order.OrderTypeMarket,
+	)
+
+	orderAsk := domain_order.NewOrder(
+		"BTCUSDT",
+		domain_order.SideBuy,
+		decimal.NewFromInt(100),
+		decimal.NewFromInt(100),
+		domain_order.OrderTypeMarket,
+	)
+}
