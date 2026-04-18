@@ -191,7 +191,7 @@ func (ob *OrderBook) removeLevel(price decimal.Decimal, side domain_order.Side) 
 3. Повторяем пока входящий ордер не исполнен или asks не кончились
 4. Если у входящего остался остаток — добавляем его в Bids
 */
-
+// TODO  матчинг ордеров с другими типами
 func (ob *OrderBook) Matching(order *domain_order.Order) (*domain_trade.MatchResult, error) {
 	ob.mu.Lock()
 	defer ob.mu.Unlock()
