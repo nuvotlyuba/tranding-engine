@@ -23,7 +23,7 @@ func NewBuilder(symbol string, period Period, onClose func(Candle)) *Builder {
 	}
 }
 
-func (b *Builder) ProccessTrade(price, qty decimal.Decimal, at time.Time) {
+func (b *Builder) ProcessTrade(price, qty decimal.Decimal, at time.Time) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
