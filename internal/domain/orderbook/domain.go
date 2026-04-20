@@ -59,7 +59,7 @@ func (ob *OrderBook) BestBid() (decimal.Decimal, bool) {
 	if ob.BidTree.Len() == 0 {
 		return decimal.Zero, false
 	}
-	return ob.BidTree.Min()
+	return ob.BidTree.Max()
 }
 
 func (ob *OrderBook) BestAsk() (decimal.Decimal, bool) {
@@ -68,7 +68,7 @@ func (ob *OrderBook) BestAsk() (decimal.Decimal, bool) {
 	if ob.AskTree.Len() == 0 {
 		return decimal.Zero, false
 	}
-	return ob.AskTree.Max()
+	return ob.AskTree.Min()
 }
 
 func (ob *OrderBook) AddOrder(order *domain_order.Order) {
