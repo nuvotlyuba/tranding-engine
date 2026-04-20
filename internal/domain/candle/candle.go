@@ -28,7 +28,7 @@ type Candle struct {
 	Trades    int
 }
 
-func NewCandle(symbol string, period Period, openTime, closeTime time.Time) *Candle {
+func NewCandle(symbol string, period Period, openTime time.Time) *Candle {
 	return &Candle{
 		Symbol:    symbol,
 		Period:    period,
