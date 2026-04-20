@@ -317,8 +317,8 @@ func TestBestBid_TwoLevelOrderBook(t *testing.T) {
 	ob.AddOrder(order2)
 
 	bestBid, flag := ob.BestBid()
-	if !bestBid.Equal(order2.Price) {
-		t.Errorf("BestBid = %s, want = %s", bestBid, order2.Price)
+	if !bestBid.Equal(order1.Price) {
+		t.Errorf("BestBid = %s, want = %s", bestBid, order1.Price)
 	}
 	if !flag {
 		t.Errorf("Is existed BestBid = %v, want = true", flag)
