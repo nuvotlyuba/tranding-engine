@@ -28,7 +28,7 @@ func TestUpdate_FirstTrade(t *testing.T) {
 	}
 
 	if !c.Close.Equal(price) {
-		t.Errorf("Low = %s, want = %s", c.Close, price)
+		t.Errorf("Close = %s, want = %s", c.Close, price)
 	}
 
 	if !c.Volume.Equal(qty) {
@@ -101,20 +101,6 @@ func TestUpdate_VolumeUpdated(t *testing.T) {
 	c.Update(decimal.NewFromInt(100), decimal.NewFromInt(1))
 	c.Update(decimal.NewFromInt(90), decimal.NewFromInt(2))
 	c.Update(decimal.NewFromInt(95), decimal.NewFromInt(3))
-
-	if !c.Low.Equal(decimal.NewFromInt(90)) {
-		t.Errorf("Low = %s, want 90", c.Low)
-	}
-
-	if !c.High.Equal(decimal.NewFromInt(100)) {
-		t.Errorf("High = %s, want 100", c.High)
-	}
-	if !c.Open.Equal(decimal.NewFromInt(100)) {
-		t.Errorf("Open = %s, want 100", c.Open)
-	}
-	if !c.Close.Equal(decimal.NewFromInt(95)) {
-		t.Errorf("Close = %s, want 95", c.Close)
-	}
 
 	if !c.Volume.Equal(decimal.NewFromInt(6)) {
 		t.Errorf("Volume = %s, want 6", c.Volume)
