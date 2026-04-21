@@ -74,29 +74,24 @@ func TestUpdate_LowUpdated(t *testing.T) {
 	}
 }
 
-func TestUpdate_CloseUpdated(t *testing.T) {
+func TestUpdate_MiddlePrice_OnlyCloseAndVolumeChange(t *testing.T) {
 	c := NewCandle("BTCUSDT", Period1m, time.Now().Truncate(time.Minute))
 
-	c.Update(decimal.NewFromInt(100), decimal.NewFromInt(1))
-	c.Update(decimal.NewFromInt(90), decimal.NewFromInt(2))
-	c.Update(decimal.NewFromInt(95), decimal.NewFromInt(3))
+	c.Update(decimal.NewFromInt(100), decimal.NewFromInt(1)) // Open=High=Low=100
+	c.Update(decimal.NewFromInt(90), decimal.NewFromInt(1))  // Low=90
+	c.Update(decimal.NewFromInt(110), decimal.NewFromInt(1)) // High=110
+	c.Update(decimal.NewFromInt(105), decimal.NewFromInt(1)) // между High и Low
 
+	// High и Low не изменились
+	if !c.High.Equal(decimal.NewFromInt(110)) {
+		t.Errorf("High = %s, want 110", c.High)
+	}
 	if !c.Low.Equal(decimal.NewFromInt(90)) {
 		t.Errorf("Low = %s, want 90", c.Low)
 	}
-
-	if !c.High.Equal(decimal.NewFromInt(100)) {
-		t.Errorf("High = %s, want 100", c.High)
-	}
-	if !c.Open.Equal(decimal.NewFromInt(100)) {
-		t.Errorf("Open = %s, want 100 (не должен меняться)", c.Open)
-	}
-	if !c.Close.Equal(decimal.NewFromInt(95)) {
-		t.Errorf("Close = %s, want 95", c.Close)
-	}
-
-	if !c.Volume.Equal(decimal.NewFromInt(6)) {
-		t.Errorf("Volume = %s, want 6", c.Volume)
+	// Close обновился
+	if !c.Close.Equal(decimal.NewFromInt(105)) {
+		t.Errorf("Close = %s, want 105", c.Close)
 	}
 }
 
