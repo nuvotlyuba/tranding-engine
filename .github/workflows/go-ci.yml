@@ -1,4 +1,4 @@
-name: GO CI
+name: tranding-engine CI
 
 on:
   push:
