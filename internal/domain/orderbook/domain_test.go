@@ -515,7 +515,7 @@ func TestCancelOrder_OrderNotExistedInOrderBook(t *testing.T) {
 	order2 := domain_order.NewOrder(
 		"BTCUSDT",
 		domain_order.SideSell,
-		decimal.NewFromInt(100),
+		decimal.NewFromInt(101),
 		decimal.NewFromInt(10),
 		domain_order.OrderTypeLimit,
 	)
