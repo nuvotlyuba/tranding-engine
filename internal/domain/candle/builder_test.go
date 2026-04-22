@@ -24,7 +24,7 @@ func TestBuilder_FirstTrade_CreatesCandle(t *testing.T) {
 	at := time.Date(2024, 1, 1, 10, 0, 30, 0, time.UTC)
 	b.ProcessTrade(decimal.NewFromInt(100), decimal.NewFromInt(5), at)
 
-	if closed == nil && len(*closed) != 0 {
+	if len(*closed) != 0 {
 		t.Errorf("onClose calls = %d, want 0", len(*closed))
 	}
 
@@ -47,7 +47,7 @@ func TestBuilder_TwoTradesInPeriod(t *testing.T) {
 	b.ProcessTrade(decimal.NewFromInt(100), decimal.NewFromInt(5), at)
 	b.ProcessTrade(decimal.NewFromInt(101), decimal.NewFromInt(10), at)
 
-	if closed != nil && len(*closed) != 0 {
+	if len(*closed) != 0 {
 		t.Errorf("onClose calls = %d, want 0", len(*closed))
 	}
 
@@ -104,8 +104,8 @@ func TestBuilder_TradesInNewPeriods(t *testing.T) {
 	b, closed := newTestBuilder("BTCUSDT", Period1m)
 
 	at1 := time.Date(2024, 1, 1, 10, 0, 30, 0, time.UTC)
-	at2 := at1.Add(2 * time.Minute) // 10:02:30 (новый период для 1m)
-	at3 := at1.Add(3 * time.Minute) // 10:03:30 (новый период для 1m)
+	at2 := at1.Add(time.Minute)     // 10:02:30 (новый период для 1m)
+	at3 := at1.Add(2 * time.Minute) // 10:03:30 (новый период для 1m)
 
 	b.ProcessTrade(decimal.NewFromInt(100), decimal.NewFromInt(5), at1)
 	b.ProcessTrade(decimal.NewFromInt(101), decimal.NewFromInt(10), at2)
@@ -153,7 +153,7 @@ func TestBuilder_ClosedCandle(t *testing.T) {
 	b.ProcessTrade(decimal.NewFromInt(100), decimal.NewFromInt(5), at1)
 	b.ProcessTrade(decimal.NewFromInt(101), decimal.NewFromInt(10), at2)
 
-	if closed != nil && len(*closed) != 1 {
+	if len(*closed) != 1 {
 		t.Errorf("onClose calls = %d, want 1", len(*closed))
 	}
 
@@ -167,7 +167,7 @@ func TestBuilder_ClosedCandle(t *testing.T) {
 }
 
 // 6. до первой сделки — возвращает (Candle{}, false)
-func TestCurrent_AfterFirstTrade(t *testing.T) {
+func TestCurrent_BeforeFirstTrade(t *testing.T) {
 	b, _ := newTestBuilder("BTCUSDT", Period1m)
 
 	curr, ok := b.Current()
@@ -183,7 +183,7 @@ func TestCurrent_AfterFirstTrade(t *testing.T) {
 
 // 7. после первой сделки — возвращает (current, true)
 
-func TestCurrent_BeforeFirstTrade(t *testing.T) {
+func TestCurrent_AfterFirstTrade(t *testing.T) {
 	b, _ := newTestBuilder("BTCUSDT", Period1m)
 
 	at := time.Date(2024, 1, 1, 10, 0, 30, 0, time.UTC)
