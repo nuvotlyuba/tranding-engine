@@ -1,7 +1,6 @@
 package indicator
 
 import (
-	"github.com/nuvotlyuba/trading-engine/internal/domain/candle"
 	domain_candle "github.com/nuvotlyuba/trading-engine/internal/domain/candle"
 	"github.com/shopspring/decimal"
 )
@@ -40,9 +39,9 @@ func (e *EMA) Update(c domain_candle.Candle) (Value, error) {
 		Data:      map[string]decimal.Decimal{"ema": e.prev},
 	}, nil
 }
-func (e *EMA) Name() string             { return "EMA" }
-func (e *EMA) Symbol() string           { return e.symbol }
-func (e *EMA) Period() candle.Period    { return e.period }
-func (e *EMA) WarmUp() int              { return e.n }
-func (e *EMA) IsReady() bool            { return e.count >= e.n }
-func (e *EMA) Current() decimal.Decimal { return e.prev }
+func (e *EMA) Name() string                 { return "EMA" }
+func (e *EMA) Symbol() string               { return e.symbol }
+func (e *EMA) Period() domain_candle.Period { return e.period }
+func (e *EMA) WarmUp() int                  { return e.n }
+func (e *EMA) IsReady() bool                { return e.count >= e.n }
+func (e *EMA) Current() decimal.Decimal     { return e.prev }
