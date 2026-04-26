@@ -9,9 +9,9 @@ type RSI struct {
 	symbol    string
 	period    domain_candle.Period
 	n         int
-	avgGain   decimal.Decimal
-	avgLoss   decimal.Decimal
-	prevClose decimal.Decimal
+	avgGain   decimal.Decimal // средний припрост (положительные дельты)
+	avgLoss   decimal.Decimal // среднее падение (отрицательные дельты взятые по модулю)
+	prevClose decimal.Decimal // предыдущая цена закрытия для расчета дельты
 	count     int
 }
 
