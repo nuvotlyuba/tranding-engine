@@ -1,6 +1,7 @@
 package indicator
 
 import (
+	"github.com/nuvotlyuba/trading-engine/internal/domain/candle"
 	domain_candle "github.com/nuvotlyuba/trading-engine/internal/domain/candle"
 	"github.com/shopspring/decimal"
 )
@@ -49,3 +50,8 @@ func (m *MACD) Update(c domain_candle.Candle) (Value, error) {
 		},
 	}, nil
 }
+func (m *MACD) Name() string          { return "MACD" }
+func (m *MACD) Symbol() string        { return m.symbol }
+func (m *MACD) Period() candle.Period { return m.period }
+func (m *MACD) WarmUp() int           { return 26 + 9 }
+func (m *MACD) IsReady() bool         { return m.count >= m.WarmUp() }
