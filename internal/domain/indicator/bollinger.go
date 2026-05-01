@@ -15,7 +15,7 @@ type BollingerBands struct {
 	mult   decimal.Decimal   // множитель, обычно 2
 }
 
-func NewBollongerbands(symbol string, period domain_candle.Period, n int, mult decimal.Decimal) *BollingerBands {
+func NewBollingerBands(symbol string, period domain_candle.Period, n int, mult decimal.Decimal) *BollingerBands {
 	return &BollingerBands{
 		symbol: symbol,
 		period: period,
