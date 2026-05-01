@@ -3,103 +3,12 @@ package eventbus
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
 )
-
-// синхронный
-// нет защиты от конкурентного доступа
-
-type BusV1 struct {
-	subs map[string][]func(payload any)
-}
-
-func NewV1() *BusV1 {
-	return &BusV1{
-		subs: make(map[string][]func(payload any)),
-	}
-}
-
-func (b *BusV1) Subscribe(topic string, handler func(payload any)) {
-	b.subs[topic] = append(b.subs[topic], handler)
-}
-
-func (b *BusV1) Publish(topic string, payload any) {
-	for _, handler := range b.subs[topic] {
-		handler(payload)
-	}
-}
-
-//  нет защиты от конкурентного доступа к map
-// неограниченное число горутин при всплеске событий
-// нет graceful shutdown
-
-type BusV2 struct {
-	subs map[string][]func(payload any)
-}
-
-func NewV2() *BusV2 {
-	return &BusV2{
-		subs: make(map[string][]func(payload any)),
-	}
-}
-
-func (b *BusV2) Subscribe(topic string, handler func(payload any)) {
-	b.subs[topic] = append(b.subs[topic], handler)
-}
-
-func (b *BusV2) Publish(topic string, payload any) {
-	for _, handler := range b.subs[topic] {
-		go handler(payload)
-	}
-}
-
-type subscriber struct {
-	queue   chan any
-	handler func(payload any)
-}
-
-type BusV3 struct {
-	subs map[string][]*subscriber
-	mu   sync.RWMutex
-}
-
-func NewV3() *BusV3 {
-	return &BusV3{
-		subs: make(map[string][]*subscriber),
-	}
-}
-func (b *BusV3) Subscribe(topic string, handler func(payload any), bufferSize int) {
-	sub := &subscriber{
-		queue: make(chan any, bufferSize),
-	}
-
-	go func() {
-		for payload := range sub.queue {
-			sub.handler(payload)
-		}
-	}()
-
-	b.mu.Lock()
-	b.subs[topic] = append(b.subs[topic], sub)
-	b.mu.Unlock()
-}
-
-func (b *BusV3) Publish(topic string, payload any) {
-	b.mu.RLock()
-	subs := b.subs[topic]
-	b.mu.RUnlock()
-
-	for _, sub := range subs {
-		select {
-		case sub.queue <- payload:
-		default:
-			log.Printf("eventbus: buffer full, topic - %s", topic)
-		}
-	}
-}
 
 type Event struct {
 	ID        string
@@ -216,4 +125,109 @@ func (b *Bus) Subscribe(ctx context.Context, topic string, handler Handler, opts
 		b.mu.Unlock()
 		wg.Wait()
 	}
+}
+
+func (s *subscription) runWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			s.drainQueue(ctx) // gracefull shutdown - дочитываем все что осталось в очереди
+			return
+		case event, ok := <-s.queue:
+			if !ok {
+				return
+			}
+			s.deliver(ctx, event)
+		}
+	}
+}
+
+func (s *subscription) drainQueue(ctx context.Context) {
+	for {
+		select {
+		case event, ok := <-s.queue:
+			if !ok {
+				return
+			}
+			s.deliver(ctx, event)
+		default:
+			return
+		}
+	}
+}
+
+func (s *subscription) deliver(ctx context.Context, event Event) {
+	policy := s.opts.Retry
+
+	for attempt := range policy.MaxAttempts {
+		if ctx.Err() != nil {
+			return
+		}
+
+		event.Attempt = attempt + 1
+		err := s.handler(ctx, event)
+		if err != nil {
+			s.metrics.processed.Add(1)
+			return
+		}
+		isLast := attempt == policy.MaxAttempts-1
+		if isLast {
+			s.metrics.failed.Add(1)
+			slog.Error("eventbus: handler failed after all retries",
+				"topic", event.Topic,
+				"subscriber", s.name,
+				"event_id", event.ID,
+				"attempts", policy.MaxAttempts,
+				"error", err,
+			)
+			return
+		}
+		// экспонециальный backoff с ограничением максимума
+		s.metrics.retried.Add(1)
+		delay := backoff(policy.InitialDealy, policy.MaxDelay, attempt)
+		slog.Warn("eventbus: handler failed, retrying",
+			"topic", event.Topic,
+			"subscriber", s.name,
+			"attempt", attempt+1,
+			"delay", delay,
+			"error", err,
+		)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+}
+
+// Metrics возвращает метрики всех подписчиков топика
+func (b *Bus) Metrics(topic string) []SubscriptionMetrics {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	result := make([]SubscriptionMetrics, 0, len(b.subs[topic]))
+	for _, sub := range b.subs[topic] {
+		result = append(result, SubscriptionMetrics{
+			Name:      sub.name,
+			Received:  sub.metrics.received.Load(),
+			Processed: sub.metrics.processed.Load(),
+			Failed:    sub.metrics.failed.Load(),
+			Dropped:   sub.metrics.dropped.Load(),
+			Retried:   sub.metrics.retried.Load(),
+		})
+	}
+	return result
+}
+
+// backoff считает задержку с экспоненциальным ростом
+func backoff(initial, max time.Duration, attempt int) time.Duration {
+	delay := time.Duration(float64(initial) * math.Pow(2, float64(attempt)))
+	if delay > max {
+		return max
+	}
+	return delay
+}
+
+func generateID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
