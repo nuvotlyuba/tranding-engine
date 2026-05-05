@@ -1,0 +1,12 @@
+.env
+*.env
+.env.local
+.env.production
+
+# Бинарники
+/trading-engine
+*.exe
+
+# Временные файлы
+*.log
+tmp/
