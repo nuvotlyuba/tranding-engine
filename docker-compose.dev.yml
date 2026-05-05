@@ -1,0 +1,65 @@
+name: trading-engine-dev
+
+networks:
+  dev:
+    driver: bridge
+
+volumes:
+  postgres_data_dev:
+
+  go_mod_cache:
+
+  go_build_cache:
+
+  kafka_data_dev:
+  zookeeper_data_env:
+
+  prometheus_data_dev:
+
+  grafana_data_dev:
+
+x-logging: &default-logging
+  driver: "json-file"
+  options: 
+    max-size: "10m"
+    max-file: "3"
+
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile.dev
+      args: 
+          - GO_VERSION:1.26.2
+    container_name: trading-engine-dev
+    restart: unless-stopped
+    networks:
+      - dev
+    ports:
+      - "8080:8080"
+      # порт для delve debugger
+      - "2345:2345"
+      # pprof - профилировщик GO
+      - "6060:6060"
+    environment:
+      APP_ENV: development
+      LOG_LEVEL: debug
+      LOG_FORMAT: text
+      DATABASE_URL: postgres://trading:trading_dev@postgres:5432/trading_engine?sslmode=false
+      KAFKA_BROKER: kafka:9092
+      HTTP_ADDR: 8080
+      CACHE_SIZE: 1000
+      PPROF_ENABLED: "true"
+      PPROF_ADDR: 6060
+    volumes:
+      - .:/app
+      - go_mod_cache:/gp/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    depends_on:
+      - postgres:
+          condition: service_healthy
+      - kafka: 
+          condition: service_heathy
+    logging: *default-logging
+    
