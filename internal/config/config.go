@@ -14,10 +14,11 @@ type HTTP struct {
 }
 
 type TimeoutConfig struct {
-	ReadTimeout     time.Duration `env:"READ_TIMEOUT,default=5s"`
-	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT,default=10s"`
-	IdleTimeout     time.Duration `env:"IDLE_TIMEOUT,default=120s"`
-	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT,default=20s"`
+	ReadTimeout       time.Duration `env:"READ_TIMEOUT,default=5s"`
+	ReadHeaderTimeout time.Duration `env:"READ_HEADER_TIMEOUT,default=5s"`
+	WriteTimeout      time.Duration `env:"WRITE_TIMEOUT,default=10s"`
+	IdleTimeout       time.Duration `env:"IDLE_TIMEOUT,default=120s"`
+	ShutdownTimeout   time.Duration `env:"SHUTDOWN_TIMEOUT,default=20s"`
 }
 
 type PostgresDB struct {

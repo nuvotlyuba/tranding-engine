@@ -22,11 +22,13 @@ type Server struct {
 func New(logger *slog.Logger, cfg config.HTTP, handler http.Handler) *Server {
 
 	httpServer := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Handler:      handler,
-		ReadTimeout:  cfg.Timeout.ReadTimeout,
-		WriteTimeout: cfg.Timeout.WriteTimeout,
-		IdleTimeout:  cfg.Timeout.IdleTimeout,
+		Addr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Handler:           handler,
+		ReadHeaderTimeout: cfg.Timeout.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Timeout.ReadTimeout,
+		WriteTimeout:      cfg.Timeout.WriteTimeout,
+		IdleTimeout:       cfg.Timeout.IdleTimeout,
+		MaxHeaderBytes:    1 << 10, // 1KB
 	}
 
 	return &Server{
@@ -54,6 +56,7 @@ func (s *Server) Run() error {
 	// Ожидание сигнала или ошибки
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(quit)
 
 	select {
 	case err := <-serverErr:
@@ -75,7 +78,7 @@ func (s *Server) shutdown() error {
 		s.logger.Error("Graceful shutdown failed, forcing close", "error", err)
 		// Принудительное закрытие как fallback
 		if closeErr := s.httpServer.Close(); closeErr != nil {
-			s.logger.Error("Force close error", "error", closeErr)
+			return fmt.Errorf("Force close error: %w", closeErr)
 		}
 		return fmt.Errorf("shutdown error: %w", err)
 	}
