@@ -1,25 +1,63 @@
-dc dev:
-	docker compose -f docker-compose.dev.yml up -d
-dc dev v :
-	docker compose -f docker-compose.dev.yml down -v
+.PHONY: up down restart logs build ps clean \
+        app db kafka postgres shell-postgres
 
+COMPOSE_FILE=docker-compose.dev.yml
+COMPOSE=docker compose -f $(COMPOSE_FILE)
 
-# bash# Запустить только базы данных (без приложения)
-# # Удобно когда запускаешь приложение локально из IDE
-# docker compose -f docker-compose.dev.yml up -d postgres kafka
+# -----------------------------------------------------------------------------
+# Основные команды
+# -----------------------------------------------------------------------------
 
-# # Посмотреть логи конкретного сервиса в реальном времени
-# docker compose -f docker-compose.dev.yml logs -f app
+up:
+	$(COMPOSE) up -d
 
-# # Перезапустить только приложение без остановки БД
-# docker compose -f docker-compose.dev.yml restart app
+down:
+	$(COMPOSE) down
 
-# # Подключиться к PostgreSQL из контейнера
-# docker compose -f docker-compose.dev.yml exec postgres \
-#   psql -U trading -d trading_engine
+restart:
+	$(COMPOSE) restart
 
-# # Полный сброс — удалить всё включая данные
-# docker compose -f docker-compose.dev.yml down -v --remove-orphans
+build:
+	$(COMPOSE) build
 
-# # Пересобрать образ приложения после изменения Dockerfile
-# docker compose -f docker-compose.dev.yml build app
+logs:
+	$(COMPOSE) logs -f
+
+ps:
+	$(COMPOSE) ps
+
+clean:
+	$(COMPOSE) down -v --remove-orphans
+
+# -----------------------------------------------------------------------------
+# Сервисы
+# -----------------------------------------------------------------------------
+
+app:
+	$(COMPOSE) up -d app
+
+db:
+	$(COMPOSE) up -d postgres kafka
+
+postgres:
+	$(COMPOSE) up -d postgres
+
+kafka:
+	$(COMPOSE) up -d kafka zookeeper kafka-ui
+
+# -----------------------------------------------------------------------------
+# Утилиты
+# -----------------------------------------------------------------------------
+
+shell-postgres:
+	$(COMPOSE) exec postgres \
+		psql -U trading -d trading_engine
+
+app-logs:
+	$(COMPOSE) logs -f app
+
+kafka-logs:
+	$(COMPOSE) logs -f kafka
+
+postgres-logs:
+	$(COMPOSE) logs -f postgres
