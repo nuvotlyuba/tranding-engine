@@ -19,6 +19,10 @@ RUN go mod download
 # Устанавливаем air для hot reload
 RUN go install github.com/air-verse/air@latest
 
+# Delve — отладчик Go
+# Позволяет ставить breakpoints и пошагово выполнять код из IDE
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
 # Копируем исходный код
 COPY . .
 
@@ -28,5 +32,5 @@ ENV CGO_ENABLED=1 \
     GOARCH=amd64
 
 
-# По умолчанию запускаем hot reload
-CMD ["air"]
+# Air читает конфиг из .air.toml
+CMD ["air", "-c", ".air.toml"]

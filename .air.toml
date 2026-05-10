@@ -1,0 +1,31 @@
+# .air.toml
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Команда сборки
+  cmd = "go build -o ./tmp/main ./cmd/engine"
+
+  # Бинарник для запуска
+  bin = "tmp/main"
+
+  # Папки за которыми следим
+  include_dir = ["cmd", "internal"]
+
+  # Расширения файлов которые триггерят пересборку
+  include_ext = ["go", "toml", "env"]
+
+  # Исключаем тесты и моки — они не влияют на запуск
+  exclude_regex = ["_test.go", "_mock.go"]
+
+  # Задержка перед пересборкой — даём время сохранить все файлы
+  delay = 1000
+
+[log]
+  time = true
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
