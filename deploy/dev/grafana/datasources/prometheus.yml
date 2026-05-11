@@ -1,0 +1,30 @@
+# deploy/dev/grafana/datasources/prometheus.yml
+#
+# Провизионирование datasource — Grafana автоматически подключается
+# к Prometheus при старте. Не нужно настраивать вручную через UI.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+
+    # proxy — Grafana сама ходит к Prometheus
+    # browser — браузер клиента ходит к Prometheus напрямую
+    access: proxy
+
+    # prometheus — имя сервиса в docker-compose
+    url: http://prometheus:9090
+
+    # Этот datasource используется по умолчанию в дашбордах
+    isDefault: true
+
+    # Можно редактировать через UI
+    editable: true
+
+    jsonData:
+      # Интервал для функции $__rate_interval в запросах
+      timeInterval: "5s"
+
+      # Метод HTTP для запросов к Prometheus
+      httpMethod: POST

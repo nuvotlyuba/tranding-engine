@@ -1,0 +1,25 @@
+# deploy/dev/grafana/dashboards/dashboard.yml
+#
+# Провайдер дашбордов — говорит Grafana где искать JSON файлы дашбордов.
+# Grafana автоматически загружает все .json файлы из указанной папки.
+
+apiVersion: 1
+
+providers:
+  - name: trading-engine
+    # Уникальный идентификатор провайдера
+    orgId: 1
+
+    # Папка в Grafana UI где будут видны дашборды
+    folder: Trading Engine
+
+    type: file
+
+    options:
+      # Путь внутри контейнера Grafana
+      # Смонтирован из ./deploy/dev/grafana/dashboards
+      path: /etc/grafana/provisioning/dashboards
+
+      # Обновлять дашборды если JSON файл изменился
+      # Удобно для разработки дашбордов
+      foldersFromFilesStructure: false

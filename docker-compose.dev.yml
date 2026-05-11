@@ -54,7 +54,7 @@ services:
       PPROF_ADDR: 6060
     volumes:
       - .:/app
-      - go_mod_cache:/gp/pkg/mod
+      - go_mod_cache:/go/pkg/mod
       - go_build_cache:/root/.cache/go-build
     depends_on:
       postgres:
@@ -73,7 +73,7 @@ services:
       - "6432:5432"
     environment:
       POSTGRES_USER: trading
-      POSTGRES_PASSWORD: tranding_dev
+      POSTGRES_PASSWORD: trading_dev
       POSTGRES_DB: trading_engine
 
     # Отключаем телеметрию TimescaleDB
@@ -145,8 +145,8 @@ services:
   #   networks:
   #     - dev
   #   ports:
-  #     # 9092 — для подключения с хоста (IDE, kafkacat, kcat)
-  #     - "9092:9092"
+  #     # 29092 — для подключения с хоста (IDE, kafkacat, kcat)
+  #     - "29092:29092"
   #   environment:
   #     KAFKA_BROKER_ID: 1
   #     KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
