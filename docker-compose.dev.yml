@@ -29,7 +29,7 @@ services:
   app:
     build:
       context: .
-      dockerfile: Dockerfile.dev
+      dockerfile: ./deploy/dev/docker/Dockerfile.dev
       args:
           - GO_VERSION:1.26.2
     container_name: trading-engine-dev
@@ -46,12 +46,20 @@ services:
       APP_ENV: development
       LOG_LEVEL: debug
       LOG_FORMAT: text
-      DATABASE_URL: postgres://trading:trading_dev@postgres:5432/trading_engine?sslmode=false
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: trading
+      POSTGRES_PASSWORD: trading_dev
+      POSTGRES_DB: trading_engine
+      POSTGRES_SSL_MODE: disable
       KAFKA_BROKER: kafka:9092
       HTTP_ADDR: 8080
       CACHE_SIZE: 1000
       PPROF_ENABLED: "true"
       PPROF_ADDR: 6060
+      BINANCE_CLIENT_ADDR: "https://api.binance.com"
+      CACHE_SIZE: 1000
+
     volumes:
       - .:/app
       - go_mod_cache:/go/pkg/mod
@@ -85,7 +93,7 @@ services:
       # SQL файлы в этой папке выполняются при первом старте контейнера
       # в алфавитном порядке: 001_init.sql, 002_timescale.sql, и т.д.
       # ВНИМАНИЕ: выполняются только если volume пустой (первый запуск)
-      - ./migrations:/docker-entrypoint-initdb.d:ro
+      # - ./migrations:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U trading -d trading_engine"]
       interval: 5s
@@ -200,7 +208,6 @@ services:
   #   container_name: trading-kafka-ui-dev
   #   restart: unless-stopped
   #   networks:
-  #     - dev
   #   ports:
   #     - "8090:8080"
   #   environment:
@@ -229,41 +236,41 @@ services:
   # # Открыть: http://localhost:9090
   # # Проверить targets: http://localhost:9090/targets
   # # ---------------------------------------------------------------------------
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    container_name: trading-prometheus-dev
-    restart: unless-stopped
-    networks:
-      - dev
-    ports:
-      - "9090:9090"
-    volumes:
-      # Конфиг Prometheus — описывает откуда собирать метрики
-      - ./deploy/dev/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  # prometheus:
+  #   image: prom/prometheus:v2.51.0
+  #   container_name: trading-prometheus-dev
+  #   restart: unless-stopped
+  #   networks:
+  #     - dev
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     # Конфиг Prometheus — описывает откуда собирать метрики
+  #     - ./deploy/dev/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
-      # Сохраняем данные между перезапусками
-      - prometheus_data_dev:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
+  #     # Сохраняем данные между перезапусками
+  #     - prometheus_data_dev:/prometheus
+  #   command:
+  #     - "--config.file=/etc/prometheus/prometheus.yml"
 
-      # Хранить данные 7 дней — в dev этого достаточно
-      - "--storage.tsdb.retention.time=7d"
+  #     # Хранить данные 7 дней — в dev этого достаточно
+  #     - "--storage.tsdb.retention.time=7d"
 
-      # Максимум 512MB для хранилища метрик
-      - "--storage.tsdb.retention.size=512MB"
+  #     # Максимум 512MB для хранилища метрик
+  #     - "--storage.tsdb.retention.size=512MB"
 
-      # Горячая перезагрузка конфига через HTTP POST
-      # curl -X POST http://localhost:9090/-/reload
-      - "--web.enable-lifecycle"
+  #     # Горячая перезагрузка конфига через HTTP POST
+  #     # curl -X POST http://localhost:9090/-/reload
+  #     - "--web.enable-lifecycle"
 
-      # Подробные логи для отладки
-      - "--log.level=debug"
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    logging: *default-logging
+  #     # Подробные логи для отладки
+  #     - "--log.level=debug"
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   logging: *default-logging
 
   # ---------------------------------------------------------------------------
   # Grafana — визуализация метрик
@@ -274,53 +281,53 @@ services:
   # Открыть: http://localhost:3000
   # Логин: admin / admin (попросит сменить при первом входе)
   # ---------------------------------------------------------------------------
-  grafana:
-    image: grafana/grafana:10.4.0
-    container_name: trading-grafana-dev
-    restart: unless-stopped
-    networks:
-      - dev
-    ports:
-      - "3000:3000"
-    environment:
-      # Дефолтные креды для dev — Grafana попросит сменить при входе
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+  # grafana:
+  #   image: grafana/grafana:10.4.0
+  #   container_name: trading-grafana-dev
+  #   restart: unless-stopped
+  #   networks:
+  #     - dev
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     # Дефолтные креды для dev — Grafana попросит сменить при входе
+  #     GF_SECURITY_ADMIN_USER: admin
+  #     GF_SECURITY_ADMIN_PASSWORD: admin
 
-      # Разрешаем анонимный просмотр дашбордов — удобно для dev
-      # В проде ВЫКЛЮЧИТЬ
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+  #     # Разрешаем анонимный просмотр дашбордов — удобно для dev
+  #     # В проде ВЫКЛЮЧИТЬ
+  #     GF_AUTH_ANONYMOUS_ENABLED: "true"
+  #     GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
 
-      # Отключаем регистрацию новых пользователей
-      GF_USERS_ALLOW_SIGN_UP: "false"
+  #     # Отключаем регистрацию новых пользователей
+  #     GF_USERS_ALLOW_SIGN_UP: "false"
 
-      # Отключаем аналитику и телеметрию
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+  #     # Отключаем аналитику и телеметрию
+  #     GF_ANALYTICS_REPORTING_ENABLED: "false"
+  #     GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
 
-      # Плагины которые установятся автоматически при старте
-      # Пустой список — стандартных плагинов достаточно
-      GF_INSTALL_PLUGINS: ""
+  #     # Плагины которые установятся автоматически при старте
+  #     # Пустой список — стандартных плагинов достаточно
+  #     GF_INSTALL_PLUGINS: ""
 
-      # Timezone для графиков
-      GF_DEFAULT_UI_THEME: dark
-    volumes:
-      # Провизионирование — автоматическая настройка при старте
-      # datasources — подключение к Prometheus
-      - ./deploy/dev/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+  #     # Timezone для графиков
+  #     GF_DEFAULT_UI_THEME: dark
+  #   volumes:
+  #     # Провизионирование — автоматическая настройка при старте
+  #     # datasources — подключение к Prometheus
+  #     - ./deploy/dev/grafana/datasources:/etc/grafana/provisioning/datasources:ro
 
-      # dashboards — предустановленные дашборды
-      - ./deploy/dev/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+  #     # dashboards — предустановленные дашборды
+  #     - ./deploy/dev/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
 
-      # Сохраняем созданные дашборды между перезапусками
-      - grafana_data_dev:/var/lib/grafana
-    depends_on:
-      prometheus:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    logging: *default-logging
+  #     # Сохраняем созданные дашборды между перезапусками
+  #     - grafana_data_dev:/var/lib/grafana
+  #   depends_on:
+  #     prometheus:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   logging: *default-logging

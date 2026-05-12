@@ -12,6 +12,6 @@ func main() {
 
 	err := app.InitAndRun(ctx)
 	if err != nil {
-		log.Fatalf("Не удалось запустить приложение: %v", err)
+		log.Fatalf("application startup error: %v", err)
 	}
 }
