@@ -24,9 +24,9 @@ type TimeoutConfig struct {
 type PostgresDB struct {
 	Host     string `env:"POSTGRES_HOST,default=localhost"`
 	Port     int    `env:"POSTGRES_PORT,default=5432"`
-	User     string `env:"POSTGRES_USER,required,default=engine"`
-	Password string `env:"POSTGRES_PASSWORD,require,default=engine"`
-	DBName   string `env:"POSTGRES_DB,required"`
+	User     string `env:"POSTGRES_USER,required"`
+	Password string `env:"POSTGRES_PASSWORD,required"`
+	DB       string `env:"POSTGRES_DB,required"`
 	SSLMode  string `env:"POSTGRES_SSL_MODE,default=disable"`
 
 	// pool настройки
@@ -35,10 +35,26 @@ type PostgresDB struct {
 	MaxConnLifetime time.Duration `env:"POSTGRES_MAX_CONN_LIFETIME,default=1h"`
 	MaxConnIdleTime time.Duration `env:"POSTGRES_MAX_CONN_IDLE_TIME,default=30m"`
 }
+type BinanceClient struct {
+	Addr string `env:"BINANCE_CLIENT_ADDR"`
+}
+type SeederLimitConfig struct {
+	Min1  int `env:"SEEDER_LIMIT_1M,default=500"`
+	Min5  int `env:"SEEDER_LIMIT_5M,default=500"`
+	Hour1 int `env:"SEEDER_LIMIT_1H,default=200"`
+}
+type SeederJobConfig struct {
+	Symbols      []string `env:"SEEDER_SYMBOLS,default=BTCUSDT,ETHUSDT"`
+	Periods      []string `env:"SEEDER_PERIODS,default=1m,5m,1h"`
+	CandleLimits SeederLimitConfig
+}
 
 type Config struct {
 	HTTP
-	Postgres PostgresDB
+	PostgresDB
+	BinanceClient
+	CacheSize int `env:"CACHE_SIZE,default=1000"`
+	SeederJob SeederJobConfig
 }
 
 func Load(ctx context.Context) (Config, error) {

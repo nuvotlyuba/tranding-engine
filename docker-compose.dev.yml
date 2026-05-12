@@ -58,7 +58,6 @@ services:
       PPROF_ENABLED: "true"
       PPROF_ADDR: 6060
       BINANCE_CLIENT_ADDR: "https://api.binance.com"
-      CACHE_SIZE: 1000
 
     volumes:
       - .:/app
